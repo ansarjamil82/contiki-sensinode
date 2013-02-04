@@ -5,6 +5,8 @@ endif
 # Make absolutely certain that you specify your device here
 DEFINES+=MODEL_N740,PROJECT_CONF_H
 
+DEFINES+=RPL_MUP_ROUTING=0
+
 # This example won't fit in flash without banking so we turn it on
 HAVE_BANKING=1
 UIP_CONF_IPV6=1

@@ -55,7 +55,7 @@ static struct uip_udp_conn *server_conn;
 static char buf[MAX_PAYLOAD_LEN];
 static uint16_t len;
 
-#define SERVER_REPLY          1
+#define SERVER_REPLY          0
 
 /* Should we act as RPL root? */
 #define SERVER_RPL_ROOT       1
@@ -71,12 +71,30 @@ AUTOSTART_PROCESSES(&udp_server_process);
 /*---------------------------------------------------------------------------*/
 static void
 tcpip_handler(void)
-{
+{ uint8_t hops;
+
   memset(buf, 0, MAX_PAYLOAD_LEN);
   if(uip_newdata()) {
     leds_on(LEDS_RED);
     len = uip_datalen();
+
+    /*This is to print output of data from the sink*/
+    putstring("0x");
+    puthex(uip_datalen());
+    putstring(" bytes response=0x");
     memcpy(buf, uip_appdata, len);
+
+    puthex(UIP_IP_BUF->srcipaddr.u8[14]); //print first byte source ID
+    puthex(UIP_IP_BUF->srcipaddr.u8[15]); //print second byte source ID
+    putchar(' ');
+    hops = uip_ds6_if.cur_hop_limit - UIP_IP_BUF->ttl + 1;
+    puthex(hops);  // print number of hops
+    putchar(' ');
+    puthex(*(buf+1));   // print seqno
+    puthex(*buf);   // print seqno
+    putchar('\n');
+    /**********************************************/
+
     PRINTF("%u bytes from [", len);
     PRINT6ADDR(&UIP_IP_BUF->srcipaddr);
     PRINTF("]:%u", UIP_HTONS(UIP_UDP_BUF->srcport));

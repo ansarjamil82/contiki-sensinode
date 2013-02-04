@@ -46,6 +46,24 @@
 #define DEBUG DEBUG_NONE
 #include "net/uip-debug.h"
 
+/***************************This is definition for MUP *****************************/
+#define SAFE                     3
+#define UNSAFE                   1
+#define ALMOST_FAILED            4
+
+#ifndef FIRE_START
+#define FIRE_START 200  // added by me
+#endif
+
+#define FIRE_DETECTED   FIRE_START
+#define ALMOST_FAILED_TIME  (FIRE_START + 115) //here we just simply set 3min.. need to check the simulation for exact timing
+#define DAMAGE_TIME   (FIRE_START + 175)// just set 30 second
+
+
+static uint8_t old_status = SAFE; //MUP
+static uint8_t current_status = SAFE;
+
+
 #define SEND_INTERVAL		2 * CLOCK_SECOND
 #define MAX_PAYLOAD_LEN		40
 
@@ -159,6 +177,13 @@ PROCESS_THREAD(udp_client_process, ev, data)
   static struct etimer et;
   uip_ipaddr_t ipaddr;
 
+  /*Definition of artificial forest fire using timer*/
+   static struct etimer periodic_sensing; //here is timer for periodic sensing equivalent of sensing period during forest fire
+
+   static uint16_t count = 0;  //initial of parameter for looping
+   static uint8_t node_damage = 0;//flag to determine node is damaged (0 = damage, 1 = functioned)
+   static uint8_t stop_send = 0;
+
   PROCESS_BEGIN();
   PRINTF("UDP client process started\n");
 
@@ -168,7 +193,7 @@ PROCESS_THREAD(udp_client_process, ev, data)
 
   print_local_addresses();
 
-  uip_ip6addr(&ipaddr, 0xfe80, 0, 0, 0, 0x0215, 0x2000, 0x0002, 0x0302);
+  uip_ip6addr(&ipaddr, 0xfe80, 0, 0, 0, 0x0215, 0x2000, 0x0002, 0x18CA);
   /* new connection with remote host */
   l_conn = udp_new(&ipaddr, UIP_HTONS(3000), NULL);
   if(!l_conn) {
@@ -182,8 +207,7 @@ PROCESS_THREAD(udp_client_process, ev, data)
          UIP_HTONS(l_conn->lport), UIP_HTONS(l_conn->rport));
 
 #if UIP_CONF_ROUTER
-  uip_ip6addr(&ipaddr, 0x2001, 0x630, 0x301, 0x6453, 0x0215, 0x2000, 0x0002,
-              0x0302);
+  uip_ip6addr(&ipaddr, 0x2001, 0x630, 0x301, 0x6453, 0x0215, 0x2000, 0x0002,0x18CA);
   g_conn = udp_new(&ipaddr, UIP_HTONS(3000), NULL);
   if(!g_conn) {
     PRINTF("udp_new g_conn error.\n");
@@ -198,11 +222,72 @@ PROCESS_THREAD(udp_client_process, ev, data)
 
   etimer_set(&et, SEND_INTERVAL);
 
+  /*Start timer for periodic sensing*/
+   etimer_set(&periodic_sensing, 5*CLOCK_SECOND); // we set the node to sense for 5 second
+
+
   while(1) {
     PROCESS_YIELD();
+
+    /*turn off radio since radio is damaged*/
+    if(node_damage){
+    PRINTF("TURNING off radio!!!!!!!!!\n");
+    putstring("Node damage.....\n");
+    NETSTACK_MAC.off(0);
+    }
+
+    /*timer for forest fire*/
+    if(etimer_expired(&periodic_sensing)){
+     //update the routing module
+     etimer_reset(&periodic_sensing);
+     count+=5;
+     PRINTF("Value of count is %d \n", count);
+
+       if(count < FIRE_DETECTED){
+         PRINTF("Node in SAFE !!!!!!!!!\n");
+         putstring("Node in SAFE status.....\n");
+         current_status = SAFE;
+       }else if(FIRE_DETECTED <= count && count < ALMOST_FAILED_TIME){
+         leds_on(LEDS_RED);
+         PRINTF("Node in UNSAFE !!!!!!!!!\n");
+         putstring("Node in unsafe status.....\n");
+         current_status = UNSAFE;
+       }else if(ALMOST_FAILED_TIME <= count && count < DAMAGE_TIME){
+         PRINTF("Node in ALMOST FAILED!!!!!!!!!\n");
+         putstring("Node in almost failed status.....\n");
+         current_status = ALMOST_FAILED;
+       }else if(count >= DAMAGE_TIME){
+         PRINTF("Node in DAMAGE!!!!!!!!!\n");
+         putstring("Node damage set parameter node damage =1.....\n");
+         stop_send = 1;
+         node_damage = 1;
+       }
+ #if RPL_MUP_ROUTING
+       PRINTF("COMPARE old_status:%d  and current status:%d\n",old_status,current_status);
+       if(old_status != current_status){
+       dag = rpl_get_any_dag();
+       if(dag != NULL) {
+       //dag->instance->of->update_status(dag, current_status);
+       //dag->instance->of->update_status(dag, current_status);
+       //PRINTF("UPDATE ROUTING............\n");
+       putstring("Changes of health status update routing.....\n");
+       }else{
+       putstring("no dag.. can not update\n");
+       }
+       }
+  #endif
+
+
+       old_status = current_status;
+       }
+
+
+
     if(etimer_expired(&et)) {
-      timeout_handler();
-      etimer_restart(&et);
+      if(stop_send == 0){
+    	  timeout_handler();
+    	  etimer_restart(&et);
+      }
     } else if(ev == tcpip_event) {
       tcpip_handler();
     }
