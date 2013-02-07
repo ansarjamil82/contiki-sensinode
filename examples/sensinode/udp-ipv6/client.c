@@ -89,7 +89,7 @@ AUTOSTART_PROCESSES(&udp_client_process);
 static void
 tcpip_handler(void)
 {
-  leds_on(LEDS_GREEN);
+ // leds_on(LEDS_GREEN);
   if(uip_newdata()) {
     putstring("0x");
     puthex(uip_datalen());
@@ -98,7 +98,7 @@ tcpip_handler(void)
     puthex((*(uint16_t *) uip_appdata) & 0xFF);
     putchar('\n');
   }
-  leds_off(LEDS_GREEN);
+ // leds_off(LEDS_GREEN);
   return;
 }
 /*---------------------------------------------------------------------------*/
@@ -108,17 +108,17 @@ timeout_handler(void)
   static int seq_id;
   struct uip_udp_conn *this_conn;
 
-  leds_on(LEDS_RED);
+//  leds_on(LEDS_RED);
   memset(buf, 0, MAX_PAYLOAD_LEN);
   seq_id++;
 
 #if UIP_CONF_ROUTER
   /* evens / odds */
-  if(seq_id & 0x01) {
-    this_conn = l_conn;
-  } else {
-    this_conn = g_conn;
-  }
+//  if(seq_id & 0x01) {
+//    this_conn = l_conn;
+//  } else {
+    this_conn = g_conn; // if configure as router use global address
+//  }
 #else
   this_conn = l_conn;
 #endif
@@ -136,7 +136,7 @@ timeout_handler(void)
 #else /* SEND_TOO_LARGE_PACKET_TO_TEST_FRAGMENTATION */
   uip_udp_packet_send(this_conn, buf, sizeof(seq_id));
 #endif /* SEND_TOO_LARGE_PACKET_TO_TEST_FRAGMENTATION */
-  leds_off(LEDS_RED);
+//  leds_off(LEDS_RED);
 }
 /*---------------------------------------------------------------------------*/
 static void
@@ -223,7 +223,7 @@ PROCESS_THREAD(udp_client_process, ev, data)
   etimer_set(&et, SEND_INTERVAL);
 
   /*Start timer for periodic sensing*/
-   etimer_set(&periodic_sensing, 5*CLOCK_SECOND); // we set the node to sense for 5 second
+   etimer_set(&periodic_sensing, CLOCK_SECOND); // we set the node to sense for 5 second
 
 
   while(1) {
@@ -240,23 +240,29 @@ PROCESS_THREAD(udp_client_process, ev, data)
     if(etimer_expired(&periodic_sensing)){
      //update the routing module
      etimer_reset(&periodic_sensing);
-     count+=5;
+     count++;
      PRINTF("Value of count is %d \n", count);
 
        if(count < FIRE_DETECTED){
+    	 leds_on(LEDS_GREEN);
+    	 leds_off(LEDS_RED);
          PRINTF("Node in SAFE !!!!!!!!!\n");
          putstring("Node in SAFE status.....\n");
          current_status = SAFE;
        }else if(FIRE_DETECTED <= count && count < ALMOST_FAILED_TIME){
          leds_on(LEDS_RED);
+         leds_off(LEDS_GREEN);
          PRINTF("Node in UNSAFE !!!!!!!!!\n");
          putstring("Node in unsafe status.....\n");
          current_status = UNSAFE;
        }else if(ALMOST_FAILED_TIME <= count && count < DAMAGE_TIME){
+    	 leds_on(LEDS_RED);  //turn all LED
+    	 leds_on(LEDS_GREEN);
          PRINTF("Node in ALMOST FAILED!!!!!!!!!\n");
          putstring("Node in almost failed status.....\n");
          current_status = ALMOST_FAILED;
        }else if(count >= DAMAGE_TIME){
+    	 leds_toggle(LEDS_ALL);  //  blink all LEDs to indicate the node is damaged
          PRINTF("Node in DAMAGE!!!!!!!!!\n");
          putstring("Node damage set parameter node damage =1.....\n");
          stop_send = 1;
